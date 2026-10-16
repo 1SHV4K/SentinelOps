@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Annotated
 
 import httpx
@@ -9,10 +10,15 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from backend.app.collector.fleet import DEFAULT_FLEET_SERVERS, FleetCollector, parse_server_registry
+from backend.app.config.baseline import load_baseline
+from backend.app.config.policy import load_policy
+from backend.app.core.detection import DriftDetector
 from backend.app.core.fingerprinting import fingerprint_state
+from backend.app.schemas.detection import DetectionScan
 from backend.app.schemas.fleet import DriftRequest, DriftResponse, FleetCollection, ResetResponse
 
 app = FastAPI(title="ConfigGuard AI", version="0.1.0")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class HealthResponse(BaseModel):
@@ -50,6 +56,14 @@ def demo_controls_enabled() -> bool:
 
 def get_fleet_collector() -> FleetCollector:
     return FleetCollector(configured_servers())
+
+
+def get_drift_detector() -> DriftDetector:
+    baseline = load_baseline(PROJECT_ROOT / "config" / "baseline.json")
+    policy = load_policy(PROJECT_ROOT / "config" / "policies.yaml")
+    if baseline.policy_version != policy.policy_version:
+        raise ValueError("Approved baseline and detection policy versions do not match")
+    return DriftDetector(baseline, policy)
 
 
 async def get_upstream_client() -> AsyncIterator[httpx.AsyncClient]:
@@ -104,6 +118,16 @@ async def fleet_states(
 ) -> FleetCollection:
     """Collect configured servers concurrently, returning partial outcomes when needed."""
     return await collector.collect()
+
+
+@app.post("/api/scans", response_model=DetectionScan)
+async def run_detection_scan(
+    collector: Annotated[FleetCollector, Depends(get_fleet_collector)],
+    detector: Annotated[DriftDetector, Depends(get_drift_detector)],
+) -> DetectionScan:
+    """Collect the current fleet and return deterministic baseline and peer assessments."""
+    collection = await collector.collect()
+    return detector.detect(collection, scanned_at=collection.collected_at)
 
 
 @app.post("/api/fleet/{server_id}/simulate-drift", response_model=DriftResponse, status_code=202)

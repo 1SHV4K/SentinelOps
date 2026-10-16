@@ -6,6 +6,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY backend ./backend
+COPY config/baseline.json config/policies.yaml ./config/
 RUN python -m pip install --no-cache-dir .
 
 USER 10001:10001

@@ -54,6 +54,28 @@ def test_fleet_states_endpoint_returns_success_and_partial_failure() -> None:
     assert response.json()["servers"][1]["error"]["kind"] == "unreachable"
 
 
+def test_post_scans_returns_structured_deterministic_assessment() -> None:
+    state = server_state("server-01")
+    collector = FleetCollector(
+        {"server-01": "http://server-01"},
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=state, request=request)
+        ),
+    )
+    app.dependency_overrides[get_fleet_collector] = lambda: collector
+    try:
+        with TestClient(app) as client:
+            response = client.post("/api/scans")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["baseline_id"] == "checkout-production"
+    assert body["successful"] == 1
+    assert body["drifted"] == 0
+    assert body["servers"][0]["outcome"] == "clean"
+
+
 def test_drift_and_reset_routes_validate_and_verify_remote_changes(monkeypatch) -> None:
     server_id = "server-03"
     url = "http://server-03:8080"

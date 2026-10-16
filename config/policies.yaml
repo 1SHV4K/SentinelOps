@@ -7,6 +7,11 @@ severity_categories:
   MEDIUM: "Meaningful reliability or observability risk needing review."
   HIGH: "Material security or availability exposure requiring prompt action."
   CRITICAL: "Immediate severe exposure, such as debug mode enabled in production."
+severity_defaults:
+  changed_value: LOW
+  missing_field: HIGH
+  unexpected_field: MEDIUM
+  peer_outlier: INFO
 rules:
   - id: prod-debug-disabled
     field: config.debug_mode

@@ -82,6 +82,10 @@ def test_compose_fleet_state_drift_and_reset() -> None:
             assert state["config"] == baseline.expected_config.model_dump(mode="json")
             assert state["environment"] == baseline.expected_environment.model_dump(mode="json")
 
+        initial_scan = request_json(f"{base}/api/scans", method="POST")
+        assert initial_scan["status"] == "complete"
+        assert initial_scan["drifted"] == 0
+
         request_json(
             f"{base}/api/fleet/server-03/simulate-drift",
             method="POST",
@@ -90,6 +94,15 @@ def test_compose_fleet_state_drift_and_reset() -> None:
         drifted = request_json(f"{base}/api/fleet/states")
         drifted_by_id = {entry["server_id"]: entry for entry in drifted["servers"]}
         assert drifted_by_id["server-03"]["state"]["config"]["debug_mode"] is True
+        drift_scan = request_json(f"{base}/api/scans", method="POST")
+        detected = next(item for item in drift_scan["servers"] if item["server_id"] == "server-03")
+        assert detected["outcome"] == "drifted"
+        debug = next(
+            item
+            for item in detected["findings"]
+            if item["evidence"]["field_path"] == "config.debug_mode"
+        )
+        assert debug["assessment"]["severity"] == "CRITICAL"
         assert drifted_by_id["server-01"]["fingerprint"] == initial_fingerprints["server-01"]
         assert drifted_by_id["server-02"]["fingerprint"] == initial_fingerprints["server-02"]
 
@@ -101,6 +114,8 @@ def test_compose_fleet_state_drift_and_reset() -> None:
             restored_by_id["server-03"]["state"]["config"] == initial_by_id["server-03"]["config"]
         )
         assert restored_by_id["server-03"]["fingerprint"] == initial_fingerprints["server-03"]
+        resolved_scan = request_json(f"{base}/api/scans", method="POST")
+        assert resolved_scan["drifted"] == 0
     finally:
         subprocess.run(
             [*compose, "down", "--remove-orphans"],
