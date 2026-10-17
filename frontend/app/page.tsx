@@ -11,6 +11,7 @@ import {
   Clock3,
   Database,
   Fingerprint,
+  History,
   Play,
   RefreshCw,
   Sparkles,
@@ -412,16 +413,36 @@ export default function Home() {
 
   return (
     <main className="dashboard-shell">
+      <a className="skip-link" href="#main-content">Skip to dashboard content</a>
+      <aside className="sidebar" aria-label="SentinelOps workspace">
+        <a className="brand" href="#overview" aria-label="SentinelOps overview">
+          <span className="brand-mark"><Shield size={20} /></span>
+          <span><b>SentinelOps</b><small>CONFIGURATION SECURITY</small></span>
+        </a>
+        <div className="sidebar-label">MONITOR</div>
+        <nav className="sidebar-nav" aria-label="Dashboard sections">
+          <a href="#overview"><Activity size={16} />Overview</a>
+          <a href="#fleet"><Server size={16} />Fleet</a>
+          <a href="#baselines"><Check size={16} />Baselines</a>
+          <a href="#findings"><ShieldAlert size={16} />Findings</a>
+          <a href="#scan-history"><History size={16} />Scan history</a>
+        </nav>
+        <div className="sidebar-footer">
+          <span className={`sidebar-status ${readiness?.status === "ready" ? "is-up" : "is-down"}`}><span className="pulse-dot" />{readiness?.status === "ready" ? "Monitor ready" : "Monitor unavailable"}</span>
+          <small>{readiness?.demo_controls_enabled ? "Local demo controls enabled" : "Demo controls disabled"}</small>
+        </div>
+      </aside>
+      <div className="app-main">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="SentinelOps overview"><span className="brand-mark"><Shield size={20} /></span><span><b>SentinelOps</b><small>CONFIGURATION MONITOR</small></span></a>
+        <div className="topbar-context"><span>OPERATIONS</span><b>Configuration posture</b></div>
         <div className="topbar-right">
           <span className={`connection ${readiness?.status === "ready" ? "is-up" : "is-down"}`}><span className="pulse-dot" />{readiness?.status === "ready" ? "Monitor connected" : "Monitor unavailable"}</span>
           <button className="icon-button" onClick={() => void refresh()} disabled={loading || busy} aria-label="Refresh dashboard"><RefreshCw size={16} className={loading ? "spin" : ""} /></button>
         </div>
       </header>
 
-      <div className="content" id="top">
-        <section className="hero-row">
+      <div className="content" id="main-content">
+        <section className="hero-row" id="overview">
           <div><div className="eyebrow"><Activity size={14} /> FLEET OPERATIONS <span className="live-tag">LIVE API DATA</span></div><h1>Configuration posture</h1><p>Track approved server state, assess drift, and walk through a controlled demo.</p></div>
           <button className="primary-button" onClick={() => void runScan()} disabled={busy || !readiness}><Play size={15} fill="currentColor" />{busy ? "Working…" : "Run scan"}</button>
         </section>
@@ -443,7 +464,7 @@ export default function Home() {
           <div className="overview-item"><span className="overview-icon amber"><Wifi size={16} /></span><div><small>Last dashboard refresh</small><strong>{dataLoadedAt ? formatDate(dataLoadedAt) : "Loading"}</strong><span>{readiness?.demo_controls_enabled ? "Demo controls enabled" : "Demo controls disabled"}</span></div></div>
         </section>
 
-        <section className="section-card inventory-card">
+        <section className="section-card inventory-card" id="fleet">
           <div className="section-heading"><div><div className="section-kicker">FLEET</div><h2>Server inventory</h2><p>Each server is compared with its own explicitly approved baseline.</p></div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="count-chip">{servers.length} servers</span><button className="primary-button" onClick={() => void openProvisionForm()} disabled={busy}><Server size={14} />Add server</button></div></div>
           {provisionFormOpen && <form className="provision-form" onSubmit={(event) => void createServer(event)}>
             <div className="candidate-top"><div><b>Add a simulated server</b><span>Creates a real private fleet container from a validated template.</span></div><button type="button" className="icon-button" onClick={() => setProvisionFormOpen(false)} disabled={provisioning} aria-label="Close form">×</button></div>
@@ -483,7 +504,7 @@ export default function Home() {
         </section>
 
         <section className="two-column">
-          <div className="section-card enrollment-card">
+          <div className="section-card enrollment-card" id="baselines">
             <div className="section-heading compact"><div><div className="section-kicker">TRUSTED CONFIGURATION</div><h2>Baseline enrollment</h2><p>Review and approve each server independently.</p></div><span className="count-chip amber-chip">{Object.values(candidates).flat().length} pending</span></div>
             <div className="actor-field"><label htmlFor="audit-actor">Approval actor <span>audit metadata only</span></label><input id="audit-actor" value={actor} maxLength={128} onChange={(event) => setActor(event.target.value)} placeholder="operator name" /></div>
             <div className="disclosure"><AlertTriangle size={15} /><span>There is no real authentication in this MVP. This name records who performed the demo action; it does not authorize the request.</span></div>
@@ -508,13 +529,13 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="two-column history-grid">
+        <section className="two-column history-grid" id="scan-history">
           <div className="section-card history-card">
             <div className="section-heading compact"><div><div className="section-kicker">PERSISTED RESULTS</div><h2>Scan history</h2><p>Saved assessments include the baseline version used.</p></div><span className="count-chip">{history.length} recent</span></div>
             {history.length === 0 ? <div className="empty-state">No persisted scans yet. Run a scan to begin.</div> : <div className="history-list">{history.map((scan) => <button className={`history-row ${selectedScanId === scan.scan_id ? "selected" : ""}`} key={scan.scan_id} onClick={() => void openScan(scan.scan_id)}><span className="history-state"><span className={`result-dot ${scan.drifted ? "dot-red" : scan.failed ? "dot-amber" : "dot-green"}`} /><span><b>{formatDate(scan.completed_at)}</b><small>{scan.scan_id.slice(0, 13)}</small></span></span><span className="history-counts"><b className={scan.drifted ? "text-red" : ""}>{scan.drifted} drift</b><span>{scan.pending_baseline} pending · {scan.failed} failed</span></span><StatusPill value={scan.status} /></button>)}</div>}
           </div>
 
-          <div className="section-card findings-card">
+          <div className="section-card findings-card" id="findings">
             <div className="section-heading compact"><div><div className="section-kicker">DETERMINISTIC EVIDENCE</div><h2>Assessment details</h2><p>{selectedScanId ? `Scan ${selectedScanId.slice(0, 13)}` : "Select a saved scan"}</p></div><span className="count-chip">{scanServers.length} assessed</span></div>
             {!activeScan ? <div className="empty-state"><ArrowDownToLine size={17} />Run or select a scan to view its findings.</div> : <div className="assessment-list">{activeScan.servers.map((assessment) => <details className="assessment" key={`${activeScan.scan_id}-${assessment.server_id}`} open={assessment.outcome === "drifted"}>
               <summary><span className="assessment-title"><span className={`result-dot ${assessment.outcome === "drifted" ? "dot-red" : assessment.outcome === "clean" ? "dot-green" : "dot-amber"}`} /><b>{servers.find((item) => item.server_id === assessment.server_id)?.display_name ?? assessment.server_id}</b><small>{assessment.server_id}</small></span><span className="assessment-provenance">{assessment.baseline_version ? `baseline v${assessment.baseline_version}` : "No approved baseline"}</span><StatusPill value={assessment.outcome} /></summary>
@@ -553,6 +574,7 @@ export default function Home() {
         </section>}
 
         <footer className="footer-note"><span><Database size={14} /> Data is returned by the live Monitor API and saved to SQLite.</span><span>Audit actors are not authenticated · No automatic remediation</span></footer>
+      </div>
       </div>
     </main>
   );

@@ -805,9 +805,7 @@ def _ai_client_from_environment() -> OpenAICompatibleAnalysisClient:
     try:
         timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "20"))
         return OpenAICompatibleAnalysisClient(
-            base_url=os.getenv(
-                "AI_BASE_URL", "https://caused-camps-consortium-midi.trycloudflare.com/v1"
-            ),
+            base_url=os.getenv("AI_BASE_URL", "http://127.0.0.1:11434/v1"),
             api_key=os.getenv("AI_API_KEY", ""),
             model=os.getenv("AI_MODEL", ""),
             timeout_seconds=timeout,

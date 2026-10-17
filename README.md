@@ -1,61 +1,153 @@
-# ConfigGuard AI
+# SentinelOps
 
-Local configuration drift demo: a dedicated Monitor container collects validated state from three independently configured server containers over a private Compose network. The Monitor compares each server with its independently approved baseline, applies YAML policy severities, and reports peer similarity as supplementary evidence. Server inventory, baseline versions, scans, and findings persist in SQLite.
+SentinelOps is a local configuration security and drift monitoring demo. It collects a small, validated configuration contract from simulated Docker servers, compares each server with its own explicitly approved baseline, applies deterministic policy severity, and stores scan evidence in SQLite. It is intended for local demonstrations and engineering review; it does not collect state from real infrastructure.
 
-## Start
+## Video Demonstration
 
-Requirements: Python 3.11–3.12 for local development, Docker Engine, and Docker Compose v2.
+[Watch the SentinelOps demonstration](VIDEO_DEMO_URL)
+
+<!-- Replace VIDEO_DEMO_URL with a public YouTube, Loom, or other shareable demonstration URL before publishing the repository. -->
+
+The demonstration should show fleet health, explicit baseline approval, a clean scan, predefined drift, policy severity, scan history, reset and recovery, and optional advisory AI analysis.
+
+## Features
+
+- Three simulated server containers report versioned configuration and environment state over a private Compose network.
+- The Monitor validates each response, checks the configured server identity, and computes canonical SHA-256 fingerprints.
+- Each server has independent, versioned baseline candidates. A person must explicitly approve a candidate before it becomes trusted.
+- Deterministic field-level comparison reports changed, missing, and unexpected fields with expected and observed evidence. Sensitive field paths are redacted.
+- YAML policies assign severity to violations; peer similarity is supplementary evidence and does not replace baseline comparison.
+- SQLite persists server inventory, baseline versions, scans, per-server results, and AI analysis in a named Docker volume.
+- The dashboard reads live API data and supports scan, baseline approval, predefined demo drift/reset, server provisioning from fixed templates, and persisted scan inspection.
+- Optional Ollama analysis explains already verified drift. It is advisory; it does not set deterministic severity or modify a server.
+
+## Video demonstration workflow
+
+1. Start the Compose services and dashboard.
+2. Wait for the Monitor to collect the simulated fleet.
+3. Review and approve each pending server baseline in **Baseline enrollment**.
+4. Run a scan and inspect the clean result.
+5. Apply a predefined drift scenario and run a scan.
+6. Inspect the field-level finding, policy severity, and saved scan.
+7. Reset the simulated server and verify recovery in a later scan.
+8. Optionally inspect the AI explanation when AI is enabled.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Browser[Browser dashboard] -->|same-origin /api proxy| Next[Next.js frontend]
+  Next -->|HTTP API| Monitor[FastAPI Monitor]
+  Monitor -->|validated state collection over private monitoring network| Servers[Simulated server containers]
+  Monitor -->|inventory, baselines, scans, findings| DB[(SQLite named volume)]
+  Monitor -->|optional allowlisted evidence| Ollama[Optional Ollama service]
+  Monitor -->|fixed-template provisioning request| Provisioner[Provisioner API]
+  Provisioner -->|filtered Docker API| Proxy[Docker socket proxy]
+  Proxy --> Engine[Docker Engine]
+  Engine -->|creates only fixed fleet image containers| Servers
+```
+
+The browser talks to the Next.js dashboard. Its `/api/*` requests use a same-origin rewrite to the Monitor. The Monitor reaches collectors only on the private `monitoring` network. SQLite is mounted at `/data/configguard.db`. Optional Ollama is attached to an AI-only Compose network, separate from the fleet collector network. The Provisioner is isolated from the Monitor's Docker socket access: only the Docker socket proxy mounts the host socket, and it is not published on a host port.
+
+All server containers in the supplied Compose project are simulations using `fleet/app.py` and checked-in example configurations. The API can provision additional containers from three built-in templates; it cannot target arbitrary hosts or accept arbitrary Docker settings.
+
+## Detection and design decisions
+
+### State validation and collection
+
+Each simulated server serves a versioned state document. The Monitor validates the schema with Pydantic models and checks response identity headers against the configured registry. It distinguishes successful collection from failure. A failed or unconfigured server is `unable_to_assess`; it is never counted as clean.
+
+### Fingerprints and drift
+
+The fingerprint code serializes the validated `config` and `environment` in canonical JSON form and hashes the result with SHA-256. Volatile collection time and identity metadata are not part of the fingerprint. Field-level comparison uses the approved server baseline and reports changed values, missing fields, or unexpected fields. The fingerprint is a reproducible state identifier; it is not a Merkle tree or a cryptographic proof of host integrity.
+
+### Policy severity and peer evidence
+
+`config/policies.yaml` defines supported rules and default severities by difference type. Rules evaluate observed values, such as debug mode, TLS minimum, connection range, and approved runtime version. Policy violations are attached to deterministic findings. Peer comparison groups compatible validated states and reports similarity or an outlier when enough peers exist; it is supplementary and does not replace the approved baseline.
+
+### Baseline approval
+
+Newly discovered servers receive a pending candidate from their collected state. Candidates are not trusted automatically. Approval records an actor name and reason for audit display, then creates an explicit approved baseline version. This demo does not authenticate or authorize that actor. Historical baseline versions remain available for scan provenance.
+
+### Persistence and failure semantics
+
+The Monitor stores server registrations, baseline candidates/versions, scans, per-server collection and assessment results, and AI analysis in SQLite. Compose mounts a named `configguard_data` volume so data survives container replacement and `docker compose down`. `docker compose down -v` removes it. A partial scan records failures and successful assessments separately; failure does not mean the server is clean.
+
+### Advisory AI
+
+When enabled, the backend builds evidence from actual deterministic findings and sends only allowlisted, non-redacted fields to the configured OpenAI-compatible endpoint. It does not send a full server snapshot. The response is stored against the scan and presented separately from deterministic assessment. AI is optional, may be unavailable, and never changes severity or applies remediation. `AI_DEMO_FALLBACK=true` uses a clearly identified local demonstration template if the provider fails; that text is not model output.
+
+## Technology stack
+
+- Python 3.11–3.12, FastAPI, Pydantic 2, HTTPX, PyYAML, and SQLite.
+- Next.js 16, React 19, TypeScript, and Lucide icons.
+- Docker Engine and Docker Compose v2 for the local simulated fleet and isolated provisioning demo.
+- Optional Ollama using its OpenAI-compatible API.
+
+Dependency version ranges are defined in `pyproject.toml`; exact frontend dependency resolutions are recorded in `frontend/package-lock.json`.
+
+## Repository layout
+
+```text
+SentinelOps/
+├── backend/app/
+│   ├── collector/       Fleet registry and validated HTTP collection
+│   ├── config/          Baseline, policy, and template loading
+│   ├── core/            Fingerprinting, drift detection, scheduler, AI client
+│   ├── schemas/         API and state contracts
+│   ├── storage/         SQLite schema and persistence operations
+│   ├── main.py          Monitor API, scans, baselines, demo controls
+│   └── provisioner.py   Fixed-template container provisioning API
+├── config/              Server registry, state schema, policies, templates
+├── fleet/               Simulated server API and sample server states
+├── frontend/            Next.js dashboard and same-origin Monitor API proxy
+├── tests/               Unit, API, contract, persistence, and Docker integration tests
+├── docker-compose.yml   Monitor, simulated servers, Provisioner, networks, volumes
+├── pyproject.toml        Python dependencies and tooling configuration
+└── README.md             Setup, architecture, security boundaries, and demo guide
+```
+
+## Prerequisites
+
+- Docker Engine and Docker Compose v2.
+- Node.js 20.9 or newer and npm compatible with the checked-in lockfile.
+- Python 3.11 or 3.12 for local backend development and tests.
+- Optional: enough local disk and memory for Ollama and the selected model.
+
+## Configuration
+
+Start from `.env.example`. It contains safe local defaults and no API key. `.env` is ignored by Git and should hold machine-specific values. The Monitor reads the following settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `APP_ENV` | Runtime environment label. |
+| `API_HOST`, `API_PORT` | Host interface and port for the published Monitor API; default binding is loopback. |
+| `DEMO_MODE` | Enables the predefined drift and reset routes in the Monitor and simulated servers. |
+| `SCAN_INTERVAL_SECONDS` | Periodic scan interval. |
+| `MONITOR_SCHEDULER_ENABLED` | Enables scheduled background collection. |
+| `DATABASE_URL` | SQLite URL; Compose stores the database in `/data` on a named volume. |
+| `AI_ENABLED` | Enables optional advisory analysis. Disabled in the example by default. |
+| `AI_BASE_URL` | Backend-only OpenAI-compatible endpoint. Compose uses the private Ollama service when the optional profile is enabled. |
+| `AI_API_KEY` | Optional backend-only provider credential; blank for local Ollama. Never expose it through a `NEXT_PUBLIC_` variable. |
+| `AI_MODEL` | Model name sent to the configured provider. |
+| `AI_TIMEOUT_SECONDS` | External AI request timeout. |
+| `AI_DEMO_FALLBACK` | Enables the clearly labeled local demo explanation after provider failure. |
+
+`CONFIGGUARD_API_TARGET` is an optional frontend server-side rewrite target, not a browser API key. The Compose `.env.example` sets the Monitor to loopback by default. Change that binding only when you intend to expose the API and have added appropriate access controls.
+
+## Quick start
+
+From the repository root:
 
 ```bash
 cp -n .env.example .env
-docker compose --profile ai up --build -d --wait
-docker compose exec ollama ollama pull qwen2.5:1.5b
+sudo docker compose up --build -d --wait
+sudo docker compose ps
 ```
 
-The Monitor listens on `http://localhost:8000`. The simulated servers have no published host ports. `DEMO_MODE=true` in the example `.env` enables the predefined demo drift and reset actions. Set it to `false` and recreate the services to disable them. SQLite data lives in the existing named `configguard_data` volume and survives container recreation and `docker compose down`; `docker compose down -v` removes the current Compose project's volumes.
+`sudo` may be omitted when the current user already has permission to use Docker. The Monitor API is available at <http://127.0.0.1:8000>; readiness is `GET /api/ready`, and process health is `GET /api/health`. The server containers do not publish host ports.
 
-The Monitor loads explicit server identities, roles, display names, and private endpoints from `config/servers.json`. Its startup collection creates a **pending** baseline candidate for each newly enrolled server; it never trusts that snapshot automatically. Approve one explicitly before drift comparisons can report clean or drifted results. For example:
-
-```bash
-candidate=$(curl -s http://localhost:8000/api/servers/server-03/baseline-candidates \
-  | python3.12 -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["baseline_id"])')
-curl -X POST "http://localhost:8000/api/servers/server-03/baselines/$candidate/approve" \
-  -H 'Content-Type: application/json' \
-  -d '{"confirm":true,"approved_by":"demo-operator","reason":"Approved demo baseline"}'
-```
-
-The supplied actor is audit metadata only; this project does not yet authenticate baseline approvers. Approve a candidate for each server you want assessed. The dashboard includes this approval flow. `GET /api/scans?limit=20&offset=0` lists saved scans and `GET /api/scans/{scan_id}` returns a saved scan with its per-server baseline versions. The Monitor performs a startup scan and then scans at `SCAN_INTERVAL_SECONDS` (default 60); on-demand `POST /api/scans` shares the same scan lock.
-
-Each server has its own named identity volume. The collector instance ID remains stable across a server restart; replacing the volume creates a different identity and the Monitor marks the mismatch instead of attaching the old baseline. The state endpoint returns only the versioned configuration contract. Collector identity, role, display name, and collector version travel in response headers and are checked against the declared registry. Collector endpoints are reachable only on the private Compose network. There is no per-caller collector authentication in this MVP: treat every workload attached to that network as trusted, and do not attach untrusted services or publish collector ports. Demo controls are separate allowlisted POST routes, disabled when `DEMO_MODE=false`.
-
-Use **Add server** in the dashboard to create a simulated server without editing Compose or `config/servers.json`. The Monitor validates a unique lowercase server ID, role, and versioned role template, then sends the fixed request to the isolated Provisioner. The Provisioner creates only the built-in fleet image on the project's private monitoring network, with a persistent identity volume, fixed resource limits, a health check, and no published port. A Docker socket proxy is the only component that mounts the host socket; neither Monitor nor server containers receive it. Docker Engine access is required for this workflow. New registrations and template metadata persist in SQLite and are recollected after Monitor restarts; a missing container is reported unavailable and is never replaced automatically. Successful first collection creates a **pending** candidate. Approve it explicitly in **Baseline enrollment** before it is trusted. Provisioning and baseline approval are demo/admin operations without real authentication.
-
-The built-in templates use only fields in the current server-state contract (`debug_mode`, `max_connections`, `log_level`, `tls_min_version`, and runtime/app versions); they contain no credentials or user-defined container settings. The current API does not expose a server removal action. Decommission a server using `POST /api/servers/{server_id}/decommission` to preserve inventory and history; do not manually delete its dynamic identity volume if you need that server's history or identity continuity. A changed role, endpoint, or instance identity becomes an identity conflict; enroll a replacement under a new ID rather than reusing its baseline.
-
-## Tests and local API
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-pytest
-ruff check .
-ruff format --check backend fleet tests
-```
-
-The Docker integration smoke test runs automatically when Docker Engine is reachable and Compose v2 are available. It verifies all three collectors, explicit baseline approval, restart identity, persisted drift after a server restart, and inventory/baseline/scan history after Monitor restart. Its unique Compose project cleanup removes only its own resources. If the Docker CLI exists but the current user cannot access the daemon, pytest reports the integration test as skipped with that reason. To run only non-Docker tests, use `pytest -m 'not integration'`.
-
-`POST /api/scans` performs and persists an on-demand collection and detection pass. Scan history is available at `GET /api/scans` and `GET /api/scans/{scan_id}`. `GET /api/health` reports process health only; `GET /api/ready` checks local database readiness for Compose and reports whether demo controls are enabled. The Monitor uses one Uvicorn worker while scheduling is enabled; startup fails clearly if `WEB_CONCURRENCY` requests multiple workers. Baseline approval has audit metadata but no real authentication in this MVP.
-
-## Advisory AI drift analysis
-
-Compose can run Ollama with the `ai` profile on a private AI network and stores downloaded models in the `ollama_models` named volume. Start with `docker compose --profile ai up --build -d --wait`, then pull `qwen2.5:1.5b` (about 986 MB) with `docker compose exec ollama ollama pull qwen2.5:1.5b`. Ollama has no host-published port and is not attached to the simulated-server network. To switch models, update `AI_MODEL` in `.env`, pull that model through the Ollama container, and recreate the Monitor. If a drift scan was analyzed while the model was downloading, use **Try Ollama again** after the pull completes.
-
-The Monitor sends only allowlisted fields from deterministic drift findings to Ollama's OpenAI-compatible API; it does not send full server snapshots. AI explanations are stored per scan and can be retrieved or retried through `GET` or `POST /api/scans/{scan_id}/analysis`. With `AI_DEMO_FALLBACK=true`, a provider failure produces a clearly labeled local template for demonstrations; it is not generated by a model. Set it to `false` to show provider failures instead. AI text is advisory and never applies remediation.
-
-## Demonstration workflow
-
-Start the Monitor and three servers with the Compose command above. In a new terminal, start the Next.js dashboard:
+In another terminal:
 
 ```bash
 cd frontend
@@ -63,36 +155,102 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:3000>. The dashboard proxies `/api/*` through Next.js to `http://127.0.0.1:8000`; set `CONFIGGUARD_API_TARGET` in the frontend environment if the Monitor is at a different address. The Compose `.env.example` enables predefined demo controls. The readiness response reports whether the Monitor has enabled them.
+Open <http://localhost:3000>. Next.js proxies `/api/*` to `http://127.0.0.1:8000` by default. Set `CONFIGGUARD_API_TARGET` in the frontend environment when the Monitor uses a different URL.
 
-On a fresh database, wait for all three servers to appear as pending and review each snapshot in **Baseline enrollment**. Enter an audit actor name and approve each server's candidate explicitly. Run a scan and verify the fleet is clean. Under **Drift controls**, choose a predefined scenario for one server and confirm the action; the dashboard calls the real Monitor endpoint and runs a scan after the server acknowledges the change. Confirm the finding and severity under **Assessment details**. Reset that server, verify the reset acknowledgement, and inspect the follow-up scan for a clean result. **Scan history** shows persisted results and the baseline version used for every assessment.
+On first startup, the Monitor collects each configured server and creates pending baseline candidates. Review the expected and observed state and explicitly approve each baseline before treating the server as clean. The dashboard shows Monitor readiness and collection failures separately.
 
-The actor name and any client demo login are not authentication. Do not expose the development Monitor or demo controls to an untrusted network. To stop the demo while retaining its database, run `docker compose down` from the repository root. Do not use `docker compose down -v` when you want to keep baseline and scan history.
+### Optional local AI analysis
 
-## Repository layout
+AI is disabled by default. To use local Ollama, set `AI_ENABLED=true` and `AI_BASE_URL=http://ollama:11434/v1` in `.env`, then start the optional service and download the configured model:
 
-```text
-SentinelOps/
-├── backend/                 FastAPI app, API schemas, collection, policy and detection
-│   └── app/
-│       ├── collector/       Server registry and HTTP collection
-│       ├── config/          Baseline and policy loaders
-│       ├── core/            Fingerprinting and deterministic drift detection
-│       ├── schemas/         Pydantic request, state and scan contracts
-│       ├── provisioner.py   Isolated fixed-template Docker provisioning API
-│       └── storage/         Versioned SQLite inventory, baselines and scan history
-├── config/                  JSON Schema, baseline, policy and safe server templates
-├── fleet/                   Simulated server container and per-server configs
-├── frontend/                Next.js dashboard and same-origin API client
-│   ├── app/                 Live fleet dashboard and styling
-│   ├── lib/api.ts           Validated endpoint calls and response types
-│   └── next.config.ts       Development API proxy to the Monitor
-├── tests/                    Backend contract, API, detector and fleet tests
-├── docker-compose.yml        Monitor, fleet, Provisioner, socket proxy, networks and volumes
-├── pyproject.toml            Python dependencies and tool configuration
-└── README.md                 Setup, validation and run instructions
+```bash
+sudo docker compose --profile ai up --build -d --wait
+sudo docker compose exec ollama ollama pull qwen2.5:1.5b
 ```
 
-The frontend is a client of the Monitor; it does not contain a second API server. Compose publishes only the Monitor API on the host, bound to loopback by default. The monitored servers stay on the internal Compose network.
+After the model is ready, run a drift scan. If a scan was analyzed before the model finished downloading, use **Try Ollama again** in the dashboard. To disable AI, set `AI_ENABLED=false` and recreate the Monitor. Do not use a temporary tunnel URL as a long-lived provider endpoint.
 
-For local backend development without the fleet, run `DATABASE_URL=sqlite:///./data/configguard.db uvicorn backend.app.main:app --host 127.0.0.1 --port 8000`. Fleet collection then needs server URLs supplied in `FLEET_SERVERS`.
+## Demonstration workflow
+
+1. Start the Monitor and fleet using the Quick start commands.
+2. Start the dashboard and open <http://localhost:3000>.
+3. Wait for registered servers and pending baseline candidates to appear.
+4. Enter an audit actor label and approve each intended baseline. The label is metadata, not authentication.
+5. Run a scan and inspect each server's result.
+6. In **Drift controls**, choose a predefined scenario and apply it to a simulated server.
+7. Run or review the resulting scan; inspect field-level expected/observed values and policy severity.
+8. Reset the simulated server and verify recovery in a later scan.
+9. Inspect saved scans in **Scan history**. Optionally enable AI and review its separate advisory explanation.
+
+**Add server** provisions a container from a built-in role template. It uses Docker Engine through the restricted socket proxy. A newly provisioned server still requires explicit baseline approval. **Decommission** preserves the server record and its scan history.
+
+To stop while retaining data, run `docker compose down`. Do not use `docker compose down -v` if you want to keep the SQLite history, server identities, and downloaded Ollama models.
+
+## API reference
+
+The Monitor API uses the `/api` prefix.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Process health. |
+| `GET` | `/api/ready` | Database readiness, fleet count, and demo-control state. |
+| `GET` | `/api/fleet/states` | Collect current state from registered servers. |
+| `GET` | `/api/servers` | Paginated server inventory. |
+| `GET` | `/api/servers/{server_id}` | Server details and current baseline information. |
+| `GET` | `/api/servers/{server_id}/baseline-candidates` | Pending baseline candidates. |
+| `POST` | `/api/servers/{server_id}/baselines/{baseline_id}/approve` | Explicitly approve a candidate. |
+| `GET` | `/api/servers/{server_id}/baselines` | Baseline version history. |
+| `POST` | `/api/scans` | Collect, assess, and persist an on-demand scan. |
+| `GET` | `/api/scans` | Paginated scan history. |
+| `GET` | `/api/scans/{scan_id}` | Persisted scan detail. |
+| `GET`, `POST` | `/api/scans/{scan_id}/analysis` | Retrieve or request advisory AI analysis. |
+| `GET` | `/api/server-templates` | Built-in provisioning templates. |
+| `POST` | `/api/servers/provision` | Provision a simulated server from an allowed template. |
+| `POST` | `/api/servers/{server_id}/decommission` | Decommission while retaining history. |
+| `POST` | `/api/fleet/{server_id}/simulate-drift` | Apply an allowlisted demo change when demo mode is enabled. |
+| `POST` | `/api/fleet/{server_id}/reset` | Restore and verify a simulated server's original state. |
+
+FastAPI's interactive API documentation is available at `/docs` while the Monitor is running.
+
+## Tests and quality checks
+
+From the repository root:
+
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/ruff format --check backend fleet tests
+sudo docker compose config --quiet
+```
+
+The Docker integration smoke test is marked `integration`. It runs when Docker Engine and Compose v2 are reachable; otherwise pytest reports the reason it was skipped. Run only non-Docker tests with `.venv/bin/python -m pytest -q -m 'not integration'`.
+
+For frontend quality checks:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run build
+```
+
+A successful unit test run alone does not verify the live Docker demonstration.
+
+## Security considerations and limitations
+
+- The fleet consists of simulated containers. Real host collection and production deployment are not implemented.
+- This MVP has no user authentication or authorization. Baseline actor labels, provisioning, decommission, and demo controls are not access controls. Keep the Monitor bound to loopback and do not expose it to an untrusted network.
+- Server collectors are reachable only inside the private Compose monitoring network, but they do not authenticate individual callers on that network.
+- The Provisioner uses a Docker socket proxy with container, volume, create, and delete operations enabled. The socket proxy and Provisioner are privileged parts of the local demo boundary; do not attach untrusted services to their networks.
+- SQLite is suitable for this single-instance local demo; concurrent multi-user production use is not a goal of this project.
+- A collection or policy assessment failure is not a clean result. The UI preserves unavailable and partial states.
+- Optional AI receives allowlisted, non-redacted finding evidence. Provider availability and output quality vary. AI text is advisory and is not an authoritative assessment or remediation action.
+- Dynamic provisioning accepts only built-in templates and does not implement real authentication, arbitrary container configuration, or server removal that erases history.
+
+## Future work
+
+Meaningful next steps include adding authenticated operator roles and audit identity, testing a deployment boundary beyond local Docker, and adding real-host collectors only with a reviewed trust and credential model.
+
+## License
+
+No license file is present. No license has been added; choose a license before accepting external contributions or redistributing the project.

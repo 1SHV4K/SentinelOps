@@ -103,3 +103,34 @@ td:first-child, th:first-child { padding-left: 4px; }
 @media (max-width: 600px) { .provision-fields { grid-template-columns: 1fr; }.provision-description { grid-column: auto; }.provision-actions { align-items: flex-start; flex-direction: column; }.section-heading > div:last-child { align-items: flex-end !important; flex-direction: column; } }
 @media (max-width: 760px) { .ai-sections { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .connection { font-size: 0; gap: 0; }.connection .pulse-dot { width: 9px; height: 9px; }.hero-row { flex-direction: column; }.primary-button { align-self: flex-end; }.metric-grid { gap: 8px; }.metric-card { min-height: 76px; gap: 9px; }.metric-icon { width: 30px; height: 30px; }.overview-item { gap: 8px; }.overview-icon { width: 26px; height: 26px; }.count-chip { font-size: 9px; }.history-row { gap: 6px; padding-inline: 3px; }.history-counts span { font-size: 8px; }.assessment summary { gap: 6px; }.assessment-title { gap: 5px; }.assessment-title small { display: none; }.assessment-provenance { font-size: 8px; }.actor-field { align-items: flex-start; flex-direction: column; }.actor-field input { width: 100%; }.demo-server { align-items: flex-start; padding: 9px 0; }.demo-server-id { align-items: flex-start; }.demo-actions button { padding: 0 6px; } }
+
+/* Workspace shell and accessible section navigation */
+.dashboard-shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 24px; padding: 22px 14px 16px; border-right: 1px solid #202c38; background: #080d13; }
+.sidebar .brand { padding: 0 4px; }
+.sidebar-label { padding: 0 10px; color: #697a8b; font-size: 9px; font-weight: 700; letter-spacing: 1.25px; }
+.sidebar-nav { display: grid; gap: 5px; }
+.sidebar-nav a { min-height: 40px; display: flex; align-items: center; gap: 11px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; color: #9aa9b8; font-size: 12px; text-decoration: none; transition: background .15s ease, color .15s ease; }
+.sidebar-nav a:hover, .sidebar-nav a:focus-visible { color: #e7edf3; border-color: #293848; background: #131e29; }
+.sidebar-nav a:focus-visible, .brand:focus-visible, .skip-link:focus-visible, summary:focus-visible { outline: 2px solid #7ab9fa; outline-offset: 2px; }
+.sidebar-nav svg { color: #7f9bb4; }
+.sidebar-footer { display: grid; gap: 7px; margin-top: auto; padding: 12px 10px 2px; border-top: 1px solid #202c38; }
+.sidebar-status { display: flex; align-items: center; gap: 8px; color: #aab6c2; font-size: 11px; }
+.sidebar-status.is-up { color: #a2d8bd; }.sidebar-status.is-down { color: #f0a3a3; }
+.sidebar-footer small { color: #718091; font-size: 9px; }
+.app-main { min-width: 0; }
+.topbar { position: sticky; top: 0; z-index: 10; height: 64px; padding: 0 28px; background: rgb(11 16 23 / 94%); backdrop-filter: blur(12px); }
+.topbar-context { display: grid; gap: 3px; }.topbar-context span { color: #76889a; font-size: 8px; font-weight: 700; letter-spacing: 1.15px; }.topbar-context b { color: #dce5ed; font-size: 12px; font-weight: 600; }
+#overview, #fleet, #baselines, #findings, #scan-history { scroll-margin-top: 82px; }
+.skip-link { position: fixed; z-index: 30; top: 8px; left: 8px; padding: 9px 12px; transform: translateY(-150%); border: 1px solid #47657d; border-radius: 6px; color: #f2f7fb; background: #122131; font-size: 12px; text-decoration: none; }
+.skip-link:focus { transform: translateY(0); }
+@media (max-width: 760px) {
+  .dashboard-shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { position: sticky; z-index: 12; top: 0; height: auto; gap: 10px; padding: 10px 14px 9px; border-right: 0; border-bottom: 1px solid #202c38; }
+  .sidebar .brand { display: none; }.sidebar-label, .sidebar-footer { display: none; }
+  .sidebar-nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+  .sidebar-nav a { min-height: 34px; flex: 0 0 auto; gap: 7px; padding: 0 9px; font-size: 10px; }
+  .sidebar-nav svg { width: 14px; height: 14px; }
+  .topbar { top: 54px; height: 56px; padding: 0 16px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

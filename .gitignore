@@ -16,3 +16,20 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+# Environment and credentials
+!.env.*.example
+*.pem
+*.p12
+*.pfx
+
+# Frontend and generated build output
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Local databases and logs
+*.sqlite-wal
+*.sqlite-shm
+*.log
