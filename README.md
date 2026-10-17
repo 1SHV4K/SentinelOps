@@ -6,9 +6,6 @@ SentinelOps is a local configuration security and drift monitoring demo. It coll
 
 [Watch the SentinelOps demonstration](VIDEO_DEMO_URL)
 
-<!-- Replace VIDEO_DEMO_URL with a public YouTube, Loom, or other shareable demonstration URL before publishing the repository. -->
-
-The demonstration should show fleet health, explicit baseline approval, a clean scan, predefined drift, policy severity, scan history, reset and recovery, and optional advisory AI analysis.
 
 ## Features
 
@@ -21,16 +18,6 @@ The demonstration should show fleet health, explicit baseline approval, a clean 
 - The dashboard reads live API data and supports scan, baseline approval, predefined demo drift/reset, server provisioning from fixed templates, and persisted scan inspection.
 - Optional Ollama analysis explains already verified drift. It is advisory; it does not set deterministic severity or modify a server.
 
-## Video demonstration workflow
-
-1. Start the Compose services and dashboard.
-2. Wait for the Monitor to collect the simulated fleet.
-3. Review and approve each pending server baseline in **Baseline enrollment**.
-4. Run a scan and inspect the clean result.
-5. Apply a predefined drift scenario and run a scan.
-6. Inspect the field-level finding, policy severity, and saved scan.
-7. Reset the simulated server and verify recovery in a later scan.
-8. Optionally inspect the AI explanation when AI is enabled.
 
 ## Architecture
 
@@ -170,22 +157,6 @@ sudo docker compose exec ollama ollama pull qwen2.5:1.5b
 
 After the model is ready, run a drift scan. If a scan was analyzed before the model finished downloading, use **Try Ollama again** in the dashboard. To disable AI, set `AI_ENABLED=false` and recreate the Monitor. Do not use a temporary tunnel URL as a long-lived provider endpoint.
 
-## Demonstration workflow
-
-1. Start the Monitor and fleet using the Quick start commands.
-2. Start the dashboard and open <http://localhost:3000>.
-3. Wait for registered servers and pending baseline candidates to appear.
-4. Enter an audit actor label and approve each intended baseline. The label is metadata, not authentication.
-5. Run a scan and inspect each server's result.
-6. In **Drift controls**, choose a predefined scenario and apply it to a simulated server.
-7. Run or review the resulting scan; inspect field-level expected/observed values and policy severity.
-8. Reset the simulated server and verify recovery in a later scan.
-9. Inspect saved scans in **Scan history**. Optionally enable AI and review its separate advisory explanation.
-
-**Add server** provisions a container from a built-in role template. It uses Docker Engine through the restricted socket proxy. A newly provisioned server still requires explicit baseline approval. **Decommission** preserves the server record and its scan history.
-
-To stop while retaining data, run `docker compose down`. Do not use `docker compose down -v` if you want to keep the SQLite history, server identities, and downloaded Ollama models.
-
 ## API reference
 
 The Monitor API uses the `/api` prefix.
@@ -247,10 +218,3 @@ A successful unit test run alone does not verify the live Docker demonstration.
 - Optional AI receives allowlisted, non-redacted finding evidence. Provider availability and output quality vary. AI text is advisory and is not an authoritative assessment or remediation action.
 - Dynamic provisioning accepts only built-in templates and does not implement real authentication, arbitrary container configuration, or server removal that erases history.
 
-## Future work
-
-Meaningful next steps include adding authenticated operator roles and audit identity, testing a deployment boundary beyond local Docker, and adding real-host collectors only with a reviewed trust and credential model.
-
-## License
-
-No license file is present. No license has been added; choose a license before accepting external contributions or redistributing the project.
