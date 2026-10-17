@@ -14,7 +14,15 @@ class FleetModel(BaseModel):
 
 class CollectionFailure(FleetModel):
     kind: Literal[
-        "timeout", "http_error", "invalid_json", "invalid_state", "unreachable", "request_error"
+        "timeout",
+        "http_error",
+        "invalid_json",
+        "invalid_state",
+        "response_too_large",
+        "identity_conflict",
+        "unreachable",
+        "request_error",
+        "not_configured",
     ]
     message: str
     upstream_status: int | None = None
@@ -25,6 +33,10 @@ class ServerCollection(FleetModel):
     status: Literal["success", "failed"]
     fingerprint: str | None = None
     state: ServerStateV1 | None = None
+    display_name: str | None = None
+    role: str | None = None
+    collector_version: str | None = None
+    instance_id: str | None = Field(default=None, exclude=True)
     error: CollectionFailure | None = None
 
 

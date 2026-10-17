@@ -13,10 +13,12 @@ x-simulated-server: &simulated-server
     - ALL
   security_opt:
     - no-new-privileges:true
+  cpus: 0.50
+  mem_limit: 256m
   expose:
     - "8080"
   networks:
-    - fleet
+    - monitoring
   healthcheck:
     test:
       - CMD
@@ -33,61 +35,187 @@ services:
     <<: *simulated-server
     environment:
       SERVER_ID: server-01
+      SERVER_DISPLAY_NAME: Checkout Web
+      SERVER_ROLE: web
+      SERVER_IDENTITY_FILE: /var/lib/configguard/instance-id
       SERVER_CONFIG: /app/fleet/server_configs/server-01.json
       DEMO_MODE: "${DEMO_MODE:-false}"
+    volumes:
+      - server_01_identity:/var/lib/configguard
 
   server-02:
     <<: *simulated-server
     environment:
       SERVER_ID: server-02
+      SERVER_DISPLAY_NAME: Checkout Application
+      SERVER_ROLE: application
+      SERVER_IDENTITY_FILE: /var/lib/configguard/instance-id
       SERVER_CONFIG: /app/fleet/server_configs/server-02.json
       DEMO_MODE: "${DEMO_MODE:-false}"
+    volumes:
+      - server_02_identity:/var/lib/configguard
 
   server-03:
     <<: *simulated-server
     environment:
       SERVER_ID: server-03
+      SERVER_DISPLAY_NAME: Checkout Database
+      SERVER_ROLE: database
+      SERVER_IDENTITY_FILE: /var/lib/configguard/instance-id
       SERVER_CONFIG: /app/fleet/server_configs/server-03.json
       DEMO_MODE: "${DEMO_MODE:-false}"
+    volumes:
+      - server_03_identity:/var/lib/configguard
 
-  backend:
-    image: configguard-backend:local
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    profiles:
+      - ai
+    cpus: 4.00
+    mem_limit: 3g
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - ai
+
+  docker-api:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      VOLUMES: "1"
+      POST: "1"
+      DELETE: "1"
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker_api
+
+  provisioner:
+    image: configguard-monitor:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["uvicorn", "backend.app.provisioner:app", "--host", "0.0.0.0", "--port", "8090"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: 0.50
+    mem_limit: 256m
+    environment:
+      DOCKER_API_URL: http://docker-api:2375
+      MONITORING_NETWORK: "${COMPOSE_PROJECT_NAME:-configguard-ai}_monitoring"
+      RESOURCE_PREFIX: "${COMPOSE_PROJECT_NAME:-configguard-ai}"
+    expose:
+      - "8090"
+    networks:
+      - provisioning
+      - docker_api
+    depends_on:
+      docker-api:
+        condition: service_started
+      server-01:
+        condition: service_started
+      server-02:
+        condition: service_started
+      server-03:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  monitor:
+    image: configguard-monitor:local
     build:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: 1.00
+    mem_limit: 512m
     environment:
       APP_ENV: "${APP_ENV:-development}"
       API_HOST: 0.0.0.0
       API_PORT: 8000
       DEMO_MODE: "${DEMO_MODE:-false}"
-      FLEET_SERVERS: "${FLEET_SERVERS:-server-01=http://server-01:8080,server-02=http://server-02:8080,server-03=http://server-03:8080}"
+      DATABASE_URL: "${DATABASE_URL:-sqlite:////data/configguard.db}"
+      SERVER_REGISTRY_FILE: /app/config/servers.json
+      SCAN_INTERVAL_SECONDS: "${SCAN_INTERVAL_SECONDS:-60}"
+      MONITOR_SCHEDULER_ENABLED: "${MONITOR_SCHEDULER_ENABLED:-true}"
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      AI_BASE_URL: "${AI_BASE_URL:-http://ollama:11434/v1}"
+      AI_API_KEY: "${AI_API_KEY:-}"
+      AI_MODEL: "${AI_MODEL:-qwen2.5:1.5b}"
+      AI_TIMEOUT_SECONDS: "${AI_TIMEOUT_SECONDS:-20}"
+      AI_DEMO_FALLBACK: "${AI_DEMO_FALLBACK:-true}"
+      PROVISIONER_URL: http://provisioner:8090
+    volumes:
+      - configguard_data:/data
     ports:
       - "${API_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
     networks:
-      - fleet
+      - monitoring
       - api
+      - ai
+      - provisioning
     depends_on:
       server-01:
-        condition: service_healthy
+        condition: service_started
       server-02:
-        condition: service_healthy
+        condition: service_started
       server-03:
+        condition: service_started
+      provisioner:
         condition: service_healthy
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=2)"
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
 
 networks:
-  fleet:
+  monitoring:
     driver: bridge
     internal: true
   api:
     driver: bridge
+  ai:
+    driver: bridge
+  provisioning:
+    driver: bridge
+    internal: true
+  docker_api:
+    driver: bridge
+    internal: true
+
+volumes:
+  configguard_data:
+  server_01_identity:
+  server_02_identity:
+  server_03_identity:
+  ollama_models:
